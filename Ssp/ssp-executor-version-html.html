@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        body { 
+            background-color: #050505; margin: 0; height: 100vh; width: 100vw;
+            overflow: hidden; display: flex; justify-content: center; align-items: center;
+            perspective: 0px; touch-action: none; font-family: sans-serif;
+        }
+
+        #ssp-gui {
+            position: absolute; width: 499px; background-color: #000;
+            z-index: 999; border: 1px solid #1a1a1a; display: flex; flex-direction: column;
+            will-change: transform; box-shadow: 0 0 50px rgba(0,0,0,1);
+        }
+
+        .topbar { width: 100%; height: 21px; background-color: #000; cursor: move; flex-shrink: 0; }
+        .white-layer { 
+            width: 100%; height: 100%; background-color: rgba(255, 255, 255, 0.2); 
+            display: flex; align-items: center; justify-content: space-between; 
+        }
+        .title { color: #fff; font-size: 13px; padding-left: 10px; font-weight: 500; pointer-events: none; }
+        .win-btn { width: 30px; height: 100%; border: none; background: transparent; color: #fff; cursor: pointer; font-weight: bold; }
+
+        #main-body { height: 330px; display: flex; flex-direction: column; background-color: rgba(255, 255, 255, 0.1); overflow: hidden; }
+        
+        .itop { height: 19px; background-color: #000; display: flex; flex-shrink: 0; }
+        .tab { flex: 1; border: none; color: #fff; background: transparent; cursor: pointer; font-size: 14px; opacity: 0.6; }
+        .tab-active { background-color: rgba(255, 255, 255, 0.25) !important; opacity: 1 !important; }
+
+        .content-frame { flex: 1; display: flex; background: #000; overflow: hidden; position: relative; }
+        
+        #ln { 
+            width: 35px; color: #555; font-size: 13px; text-align: center; 
+            padding-top: 5px; background: #080808; flex-shrink: 0; 
+            border-right: 1px solid #1a1a1a; font-family: 'Consolas', monospace;
+            line-height: 1.5; overflow: hidden; user-select: none;
+        }
+        
+        #lua-input { 
+            flex: 1; background: transparent; border: none; color: #fff; 
+            font-size: 13px; padding: 5px; outline: none; resize: none; 
+            font-family: 'Consolas', monospace; line-height: 1.5;
+            white-space: pre; overflow: auto;
+        }
+
+        #con-view { 
+            display: none; width: 100%; height: 100%; padding: 12px; 
+            color: #00ff41; font-size: 12px; font-family: 'Consolas', monospace; 
+            overflow-y: auto; box-sizing: border-box; background: #000;
+            white-space: pre-wrap; word-break: break-all;
+        }
+
+        .down { height: 22px; background-color: #000; flex-shrink: 0; }
+        .down-layer { height: 100%; background-color: rgba(255, 255, 255, 0.2); display: flex; gap: 1px; }
+        .f-btn { flex: 1; background: #000; border: none; color: #fff; font-size: 13px; cursor: pointer; }
+        .f-btn:active { background: #1a1a1a; }
+    </style>
+</head>
+<body onmousedown="interact(event)" ontouchstart="interact(event)">
+
+<div id="ssp-gui">
+    <div class="topbar" id="drag-handle">
+        <div class="white-layer">
+            <div class="title">Secret Service Panel</div>
+            <div class="controls">
+                <button class="win-btn" onclick="toggleMin()">-</button>
+                <button class="win-btn" onclick="location.reload()">X</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="main-body">
+        <div class="itop">
+            <button id="b-exe" class="tab tab-active" onclick="switchTab('exe')">Executor</button>
+            <button id="b-con" class="tab" onclick="switchTab('con')">Console</button>
+        </div>
+
+        <div class="content-frame">
+            <div id="ln">1</div>
+            <textarea id="lua-input" spellcheck="false" placeholder='require(ID).load….'></textarea>
+            <div id="con-view">SSP Console Initialized...</div>
+        </div>
+
+        <div class="down">
+            <div class="down-layer">
+                <button class="f-btn" onclick="run(false)">Execute</button>
+                <button class="f-btn" onclick="run(true)">Execute & Console</button>
+                <button class="f-btn" onclick="clearTxt()">Clear</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<audio id="ssp-audio"></audio>
+
+<script>
+    const gui = document.getElementById("ssp-gui"), input = document.getElementById("lua-input");
+    const ln = document.getElementById("ln"), consoleView = document.getElementById("con-view");
+    const player = document.getElementById("ssp-audio");
+
+    const TOKEN = "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";
+    const GIST_ID = "94fb9e1c8b34b13c3f0baeb5583c5d76";
+
+    // --- MÚSICA CORREGIDA ---
+    const playlist = ["Musica/idkrandoml.mp3", "Musica/random.mp3"];
+    let currentTrack = 0, musicStarted = false;
+
+    function startPlaylist() {
+        if (musicStarted || playlist.length === 0) return;
+        musicStarted = true;
+        playNext();
+    }
+
+    function playNext() {
+        if (playlist.length === 0) return;
+        player.src = playlist[currentTrack % playlist.length];
+        player.volume = 0.4;
+        player.play().catch(e => {
+            console.log("Esperando interacción para audio...");
+            musicStarted = false;
+        });
+        currentTrack++;
+    }
+    player.onended = playNext;
+
+    // --- MOVIMIENTO ---
+    let posX = 0, posY = 0, zoomTarget = 1.0, zoomCurrent = 1.0;
+    let isDragging = false, isZooming = false;
+    let startX, startY, startYZoom;
+
+    function lerp(a, b, n) { return (1 - n) * a + n * b; }
+
+    function update() {
+        zoomCurrent = lerp(zoomCurrent, zoomTarget, 0.15);
+        gui.style.transform = `translate3d(${posX}px, ${posY}px, 0px) scale(${zoomCurrent})`;
+        requestAnimationFrame(update);
+    }
+    update();
+
+    function interact(e) {
+        startPlaylist();
+        if (e.target.closest('#ssp-gui')) return;
+        isZooming = true;
+        const ev = e.touches ? e.touches[0] : e;
+        startYZoom = ev.clientY;
+    }
+
+    input.oninput = () => {
+        const lines = input.value.split('\n').length;
+        ln.innerHTML = Array.from({length: lines}, (_, i) => i + 1).join('<br>');
+    };
+    input.onscroll = () => { ln.scrollTop = input.scrollTop; };
+
+    document.getElementById("drag-handle").onmousedown = document.getElementById("drag-handle").ontouchstart = (e) => {
+        isDragging = true;
+        const ev = e.touches ? e.touches[0] : e;
+        startX = ev.clientX - posX;
+        startY = ev.clientY - posY;
+        startPlaylist();
+    };
+
+    window.onmousemove = window.ontouchmove = (e) => {
+        const ev = e.touches ? e.touches[0] : e;
+        if (isDragging) {
+            posX = ev.clientX - startX;
+            posY = ev.clientY - startY;
+        } else if (isZooming) {
+            let diff = startYZoom - ev.clientY;
+            zoomTarget += diff * 0.005;
+            startYZoom = ev.clientY;
+            zoomTarget = Math.max(0.2, Math.min(3.0, zoomTarget));
+        }
+    };
+
+    window.onmouseup = window.ontouchend = () => { isDragging = isZooming = false; };
+
+    function switchTab(t) {
+        const isExe = (t === 'exe');
+        ln.style.display = isExe ? 'block' : 'none';
+        input.style.display = isExe ? 'block' : 'none';
+        consoleView.style.display = isExe ? 'none' : 'block';
+        document.getElementById("b-exe").classList.toggle("tab-active", isExe);
+        document.getElementById("b-con").classList.toggle("tab-active", !isExe);
+    }
+
+    function addLog(msg, color = "#00ff41") {
+        const time = new Date().toLocaleTimeString('en-GB');
+        consoleView.innerHTML += `\n<span style="color:#666">[${time}]</span> <span style="color:${color}">${msg}</span>`;
+        consoleView.scrollTop = consoleView.scrollHeight;
+    }
+
+    function clearTxt() { 
+        input.value = ""; ln.innerHTML = "1";
+        consoleView.innerHTML = "Console Cleared.";
+    }
+
+    async function run(openConsole) {
+        if(openConsole) switchTab('con');
+        const code = input.value.trim();
+        const WEBHOOK_URL = "https://discord.com/api/webhooks/1463755410241622047/StVDgTdU7yQ6VUwFxAADVG5cwPu-K9ADfBpiAb0xpy8acGw8q1m4qy5gUpboDI4P7cit";
+
+        const m = code.match(/require\((\d+)\)([\.:])(\w+)\s*\((["']?)(.*?)\4\)/);
+        const mDirect = !m ? code.match(/require\((\d+)\)\((["']?)(.*?)\2\)/) : null;
+
+        let id, type, method, arg, fullCommand;
+
+        if (m) {
+            id = m[1]; type = m[2]; method = m[3]; arg = m[5] || "";
+            fullCommand = `require(${id})${type}${method}("${arg}")`;
+        } else if (mDirect) {
+            id = mDirect[1]; type = "()"; method = "Direct"; arg = mDirect[3] || "";
+            fullCommand = `require(${id})("${arg}")`;
+        } else {
+            addLog("ERROR: Sintaxis inválida", "#ff4444");
+            return;
+        }
+
+        try {
+            const r = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+                method: 'PATCH',
+                headers: { 'Authorization': `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ files: { "api.txt": { content: `CMD|${id}|${type}|${method}|${arg}|${Date.now()}` } } })
+            });
+
+            if(r.ok) {
+                addLog("¡COMANDO ENVIADO!", "#00ff41");
+                fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        "content": "**Comando copiable:**\n`" + fullCommand + "`",
+                        "embeds": [{
+                            "title": "🚀 SSP Log",
+                            "color": 5814783,
+                            "fields": [
+                                { "name": "ID", "value": id, "inline": true },
+                                { "name": "Símbolo", "value": type, "inline": true },
+                                { "name": "Método", "value": method, "inline": true },
+                                { "name": "Arg", "value": arg || "ninguno" }
+                            ],
+                            "footer": { "text": "Secret Service Panel • " + new Date().toLocaleString() }
+                        }]
+                    })
+                });
+            }
+        } catch(e) { addLog("ERROR DE RED", "#ff4444"); }
+    }
+
+    function toggleMin() {
+        const mb = document.getElementById("main-body");
+        mb.style.display = (mb.style.display === "none") ? "flex" : "none";
+    }
+</script>
+</body>
+</html>

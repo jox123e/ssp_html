@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSP - Portal</title>
+    <style>
+        :root { --glow: #00ff41; --bg: #050505; }
+        body { background: var(--bg); color: white; font-family: 'Courier New', Courier, monospace; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+        
+        .container { 
+            width: 380px; background: #000; border: 1px solid #1a1a1a; padding: 25px; 
+            text-align: center; box-shadow: 0 0 40px rgba(0,0,0,0.8); position: relative;
+        }
+
+        h1 { font-size: 20px; color: var(--glow); text-transform: uppercase; margin-bottom: 25px; letter-spacing: 3px; text-shadow: 0 0 10px var(--glow); }
+        
+        .btn { 
+            width: 100%; padding: 14px; margin: 12px 0; background: transparent; 
+            border: 1px solid #333; color: #fff; cursor: pointer; font-size: 13px; 
+            transition: 0.3s; text-transform: uppercase; font-weight: bold;
+        }
+
+        .btn:hover { border-color: var(--glow); background: rgba(0, 255, 65, 0.1); box-shadow: 0 0 15px rgba(0, 255, 65, 0.2); }
+
+        .frame { display: none; }
+        .active { display: block; animation: scanline 0.3s ease-out; }
+
+        input { 
+            width: 90%; padding: 12px; background: #080808; border: 1px solid #222; 
+            color: var(--glow); margin-bottom: 20px; text-align: center; outline: none; font-size: 16px;
+        }
+
+        #api-text { 
+            width: 100%; height: 180px; font-size: 11px; background: #080808; 
+            color: #00cc33; border: 1px solid #1a1a1a; margin-bottom: 15px; 
+            resize: none; font-family: 'Consolas', monospace; padding: 5px;
+        }
+
+        .status { font-size: 10px; color: #555; margin-bottom: 10px; text-transform: uppercase; }
+
+        @keyframes scanline {
+            from { opacity: 0; transform: scale(0.98); }
+            to { opacity: 1; transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="main-menu" class="container frame active">
+        <h1>Main Menu SSP</h1>
+        <button class="btn" onclick="showFrame('key-frame')">1. Enter SSP</button>
+        <button class="btn" onclick="showFrame('api-frame')">2. Api Copy Lua</button>
+        <div class="status">System Status: <span style="color: var(--glow);">Online</span></div>
+    </div>
+
+    <div id="key-frame" class="container frame">
+        <h1>Security Check</h1>
+        <p style="font-size: 11px; color: #888;">ENTER ENCRYPTION KEY</p>
+        <input type="password" id="key-input" placeholder="••••••••••••">
+        <button class="btn" onclick="verifyKey()">Access Terminal</button>
+        <button class="btn" style="border-color: #440000;" onclick="showFrame('main-menu')">Return</button>
+    </div>
+
+    <div id="api-frame" class="container frame">
+        <h1>Injector API</h1>
+        <div id="loading-msg" class="status">Reading inyector.txt...</div>
+        <textarea id="api-text" readonly placeholder="Fetching data from server..."></textarea>
+        
+        <button class="btn" id="copy-btn" onclick="copyApi()">📋 Copy to Clipboard</button>
+        <button class="btn" onclick="showFrame('main-menu')">Back to Menu</button>
+    </div>
+
+<script>
+    // --- CONFIGURACIÓN DE RUTAS ---
+    const KEY_REQUIRED = "jox23524435:;:/loadins";
+    const PANEL_FILE   = "ssp-executor-version-html.html"; 
+    
+    // Si el inyector está en una carpeta, pon el nombre aquí:
+    // Ejemplo: "Inyectors/inyector-new.txt"
+    const LUA_FILE     = "inyector-new.txt"; 
+
+    // --- LÓGICA DEL SISTEMA ---
+
+    function showFrame(id) {
+        document.querySelectorAll('.frame').forEach(f => f.classList.remove('active'));
+        const target = document.getElementById(id);
+        target.classList.add('active');
+
+        // Al entrar a la sección de API, intenta leer el archivo
+        if (id === 'api-frame') {
+            loadExternalLua();
+        }
+    }
+
+    async function loadExternalLua() {
+        const area = document.getElementById("api-text");
+        const msg = document.getElementById("loading-msg");
+        
+        try {
+            // Buscamos el archivo en la carpeta especificada
+            const response = await fetch(LUA_FILE + "?nocache=" + Date.now());
+            
+            if (response.ok) {
+                const code = await response.text();
+                area.value = code;
+                msg.innerText = "Archivo cargado desde carpeta";
+                msg.style.color = "#00ff41";
+            } else {
+                area.value = "-- Error 404: No se encontró el archivo en la ruta: " + LUA_FILE;
+                msg.innerText = "Archivo no encontrado";
+                msg.style.color = "#ff4444";
+            }
+        } catch (e) {
+            area.value = "-- Error de Seguridad: El navegador bloqueó el acceso local.\n\nSOLUCIÓN: Sube los archivos a un hosting o usa 'Live Server'.";
+            msg.innerText = "Error de acceso";
+            msg.style.color = "#ff4444";
+        }
+    }
+
+    function verifyKey() {
+        const input = document.getElementById('key-input').value;
+        if (input === KEY_REQUIRED) {
+            // Si la key es correcta, redirige al panel
+            window.location.href = PANEL_FILE;
+        } else {
+            alert("KEY INCORRECTA - ACCESO DENEGADO");
+            document.getElementById('key-input').value = "";
+        }
+    }
+
+    function copyApi() {
+        const apiText = document.getElementById("api-text");
+        
+        // Evita copiar mensajes de error
+        if (apiText.value.includes("-- Error") || apiText.value === "") return;
+
+        navigator.clipboard.writeText(apiText.value).then(() => {
+            const btn = document.getElementById("copy-btn");
+            const oldText = btn.innerText;
+            
+            btn.innerText = "✅ COPIADO!";
+            btn.style.color = "#00ff41";
+            btn.style.borderColor = "#00ff41";
+
+            setTimeout(() => {
+                btn.innerText = oldText;
+                btn.style.color = "#fff";
+                btn.style.borderColor = "#333";
+            }, 2000);
+        });
+    }
+</script>
+</body>
+</html>

